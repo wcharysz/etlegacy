@@ -3088,41 +3088,69 @@ void CL_InitRef(void)
 	char        dllName[MAX_OSPATH];
 #endif
 
+
 #ifdef USE_RENDERER_DLOPEN
 	cl_renderer = Cvar_Get("cl_renderer", DEFAULT_RENDERER_NAME, CVAR_ARCHIVE_ND | CVAR_LATCH);
 
-
-#if defined(_WIN32)
+#if defined(__APPLE__)
+	if (!Q_stricmp(cl_renderer->string, "metal")) {
+		// Use built-in Metal renderer
+		GetRefAPI = GetRefAPI; // Symbol from renderer_metal
+		rendererLib = NULL;
+	} else {
+		Com_sprintf(dllName, sizeof(dllName), "librenderer_%s" DLL_EXT, cl_renderer->string);
+		rendererLib = Sys_LoadDll(dllName, qfalse);
+		if (!rendererLib && strcmp(cl_renderer->string, cl_renderer->resetString) != 0) {
+			Cvar_ForceReset("cl_renderer");
+			Com_sprintf(dllName, sizeof(dllName), "librenderer_" DEFAULT_RENDERER_NAME DLL_EXT);
+			rendererLib = Sys_LoadLibrary(dllName);
+		}
+		if (!rendererLib) {
+			Com_Printf("failed:\n\"%s\"\n", Sys_LibraryError());
+			Com_Error(ERR_FATAL, "Failed to load renderer lib");
+		}
+		GetRefAPI = Sys_LoadFunction(rendererLib, "GetRefAPI");
+		if (!GetRefAPI) {
+			Com_Error(ERR_FATAL, "Can't load symbol GetRefAPI: '%s'", Sys_LibraryError());
+		}
+	}
+#elif defined(_WIN32)
 	Com_sprintf(dllName, sizeof(dllName), "renderer_%s_" ARCH_STRING DLL_EXT, cl_renderer->string);
-#elif defined(__APPLE__)
-	Com_sprintf(dllName, sizeof(dllName), "librenderer_%s" DLL_EXT, cl_renderer->string);
-#else // *nix
-	Com_sprintf(dllName, sizeof(dllName), "librenderer_%s_" ARCH_STRING DLL_EXT, cl_renderer->string);
-#endif
 	if (!(rendererLib = Sys_LoadDll(dllName, qfalse)) && strcmp(cl_renderer->string, cl_renderer->resetString) != 0)
 	{
 		Cvar_ForceReset("cl_renderer");
-#if defined(_WIN32)
 		Com_sprintf(dllName, sizeof(dllName), "renderer_" DEFAULT_RENDERER_NAME "_" ARCH_STRING DLL_EXT);
-#elif defined(__APPLE__)
-		Com_sprintf(dllName, sizeof(dllName), "librenderer_" DEFAULT_RENDERER_NAME DLL_EXT);
-#else // *nix
-		Com_sprintf(dllName, sizeof(dllName), "librenderer_" DEFAULT_RENDERER_NAME "_" ARCH_STRING DLL_EXT);
-#endif
 		rendererLib = Sys_LoadLibrary(dllName);
 	}
-
 	if (!rendererLib)
 	{
 		Com_Printf("failed:\n\"%s\"\n", Sys_LibraryError());
 		Com_Error(ERR_FATAL, "Failed to load renderer lib");
 	}
-
 	GetRefAPI = Sys_LoadFunction(rendererLib, "GetRefAPI");
 	if (!GetRefAPI)
 	{
 		Com_Error(ERR_FATAL, "Can't load symbol GetRefAPI: '%s'", Sys_LibraryError());
 	}
+#else // *nix
+	Com_sprintf(dllName, sizeof(dllName), "librenderer_%s_" ARCH_STRING DLL_EXT, cl_renderer->string);
+	if (!(rendererLib = Sys_LoadDll(dllName, qfalse)) && strcmp(cl_renderer->string, cl_renderer->resetString) != 0)
+	{
+		Cvar_ForceReset("cl_renderer");
+		Com_sprintf(dllName, sizeof(dllName), "librenderer_" DEFAULT_RENDERER_NAME "_" ARCH_STRING DLL_EXT);
+		rendererLib = Sys_LoadLibrary(dllName);
+	}
+	if (!rendererLib)
+	{
+		Com_Printf("failed:\n\"%s\"\n", Sys_LibraryError());
+		Com_Error(ERR_FATAL, "Failed to load renderer lib");
+	}
+	GetRefAPI = Sys_LoadFunction(rendererLib, "GetRefAPI");
+	if (!GetRefAPI)
+	{
+		Com_Error(ERR_FATAL, "Can't load symbol GetRefAPI: '%s'", Sys_LibraryError());
+	}
+#endif
 #endif
 
 	ri.Cmd_AddSystemCommand    = Cmd_AddSystemCommand;
